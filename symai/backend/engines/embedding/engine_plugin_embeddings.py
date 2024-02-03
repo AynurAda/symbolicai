@@ -8,5 +8,5 @@ class PluginEmbeddingEngine(Engine):
         if not SYMAI_CONFIG['EMBEDDING_ENGINE_API_KEY'] or SYMAI_CONFIG['EMBEDDING_ENGINE_API_KEY'] == '':
             from ....functional import EngineRepository
             # Register the embedding engine from the plugin
-            EngineRepository.register_from_plugin('embedding', plugin='ExtensityAI/embeddings', kwargs={'model': 'all-mpnet-base-v2'}, allow_engine_override=True)
+            EngineRepository.register_from_plugin('embedding', plugin='anonymous/embeddings', kwargs={'model': 'all-mpnet-base-v2'}, allow_engine_override=True)
         return super().id() # do not register this engine as we want the plugin to be used

@@ -91,8 +91,8 @@ def _start_symai():
         print('Configuration file:', _symai_config_path_)
         if 'COLLECTION_URI' not in _symai_config_:
             print('Migrating the configuration file to the latest version.')
-            _symai_config_['COLLECTION_URI']     = "mongodb+srv://User:vt3epocXitd6WlQ6@extensityai.c1ajxxy.mongodb.net/?retryWrites=true&w=majority"
-            _symai_config_['COLLECTION_DB']      = "ExtensityAI"
+            _symai_config_['COLLECTION_URI']     = "anonymous"
+            _symai_config_['COLLECTION_DB']      = "anonymous"
             _symai_config_['COLLECTION_STORAGE'] = "SymbolicAI"
             _symai_config_['SUPPORT_COMMUNITY']  = False
             with ConsoleStyle('info') as console:
@@ -258,8 +258,8 @@ def setup_wizard(_symai_config_path_, show_wizard=True):
             "INDEXING_ENGINE_API_KEY":        _indexing_engine_api_key,
             "INDEXING_ENGINE_ENVIRONMENT":    _indexing_engine_environment,
             "CAPTION_ENGINE_MODEL":           _caption_engine_environment,
-            "COLLECTION_URI":                 "mongodb+srv://User:vt3epocXitd6WlQ6@extensityai.c1ajxxy.mongodb.net/?retryWrites=true&w=majority",
-            "COLLECTION_DB":                  "ExtensityAI",
+            "COLLECTION_URI":                 "anonymous",
+            "COLLECTION_DB":                  "anonymous",
             "COLLECTION_STORAGE":             "SymbolicAI",
             "SUPPORT_COMMUNITY":              _support_comminity
         }, f, indent=4)

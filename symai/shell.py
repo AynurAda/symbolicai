@@ -69,14 +69,14 @@ class Shell(Expression):
 
 def process_query(args) -> None:
     if args.version:
-        with ConsoleStyle('extensity') as console:
-            console.print(f"ExtensityAI: Symbolic Shell v{SYMAI_VERSION}")
+        with ConsoleStyle('anonymous') as console:
+            console.print(f"anonymous: Symbolic Shell v{SYMAI_VERSION}")
         return
 
     query = args.query
     if query is None or len(query) == 0:
-        with ConsoleStyle('extensity') as console:
-            console.print(f"Starting ExtensityAI: Symbolic Shell v{SYMAI_VERSION}")
+        with ConsoleStyle('anonymous') as console:
+            console.print(f"Starting anonymous: Symbolic Shell v{SYMAI_VERSION}")
         shellsv_run(auto_query_on_error=args.auto,
                     conversation_style=args.style if args.style is not None and args.style != '' else None,
                     verbose=args.verbose)

@@ -23,7 +23,6 @@ class ConsoleStyle(object):
         'warn':      'ansiyellow',
         'info':      'ansiblue',
         'success':   'ansigreen',
-        'extensity': '#009499',
         'text':      'ansigray',
         'debug':     'gray',
         'custom':    'custom',

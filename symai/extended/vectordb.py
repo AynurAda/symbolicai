@@ -118,7 +118,7 @@ class VectorDB(Expression):
         self.index_top_k        = top_k
         self.index_name         = index_name
         # init embedding function
-        self.model              = embedding_model or Interface('ExtensityAI/embeddings')
+        self.model              = embedding_model or Interface('anonymous')
         self.embedding_function = embedding_function or self._get_embedding
         if vectors is not None:
             self.vectors        = vectors

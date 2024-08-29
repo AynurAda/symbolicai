@@ -18,7 +18,6 @@ from .backend import engines
 
 logger = logging.getLogger('functional')
 
-
 class ConstraintViolationException(Exception):
     pass
 
@@ -109,6 +108,56 @@ def _execute_query(engine, post_processors, return_constraint, argument) -> List
     return rsp, metadata
 
 
+def execute_query_batch(engine, post_processors: Optional[List], return_constraint, argument) -> List[object]:
+    engine.prepare(argument)
+
+    if argument.prop.preview:
+        return engine.preview(argument), {}
+
+    outputs = engine(argument)
+    responses = outputs[0]
+    metadata = outputs[1]
+    argument.prop.outputs = outputs
+    argument.prop.metadata = metadata
+
+    processed_responses = []
+    for rsp in responses:
+        # Apply post-processors
+        if post_processors:
+            for pp in post_processors:
+                rsp = pp(rsp, argument)
+
+        # Check if return type cast is needed
+        if str(return_constraint) == str(type(rsp)):
+            pass
+        elif return_constraint in (list, tuple, set, dict):
+            try:
+                res = ast.literal_eval(rsp)
+            except Exception as e:
+                logging.warn(f"Failed to cast return type to {return_constraint} for {str(rsp)}")
+                res = rsp
+            assert res is not None, f"Return type cast failed! Check if the return type is correct or post_processors output matches desired format: {str(rsp)}"
+            rsp = res
+        elif return_constraint == bool:
+            if len(rsp) <= 0:
+                rsp = False
+            else:
+                rsp = _probabilistic_bool(rsp, mode=ENGINE_PROBABILISTIC_BOOLEAN_MODE)
+        elif return_constraint == inspect._empty:
+            pass
+        else:
+            if not isinstance(rsp, return_constraint):
+                rsp = return_constraint(rsp)
+
+        # Check if satisfies constraints
+        for constraint in argument.prop.constraints:
+            if not constraint(rsp):
+                raise ConstraintViolationException("Constraint not satisfied:", rsp, constraint)
+
+        processed_responses.append(rsp)
+
+    return processed_responses, metadata
+
 def _process_query(engine,
                    instance,
                    func:                Callable,
@@ -144,7 +193,7 @@ def _process_query(engine,
     argument.prop.trials            = trials
     argument.prop.pre_processors    = pre_processors
     argument.prop.post_processors   = post_processors
-
+    print(argument)
     # pre-process input with pre-processors
     processed_input               = ''
     if pre_processors and not argument.prop.raw_input:
@@ -210,9 +259,99 @@ def _process_query(engine,
 
     if argument.prop.return_metadata:
         return rsp, metadata
-
     return rsp
 
+def _process_query_batch(engine,
+                        instance,
+                        func: Callable,
+                        constraints: List[Callable] = [],
+                        default: Optional[object] = None,
+                        limit: int = 1,
+                        trials: int = 1,
+                        pre_processors: Optional[List[PreProcessor]] = None,
+                        post_processors: Optional[List[PostProcessor]] = None,
+                        argument = None):  # Single argument container from core
+    instances = instance
+    if pre_processors and not isinstance(pre_processors, list):
+        pre_processors = [pre_processors]
+    if post_processors and not isinstance(post_processors, list):
+        post_processors = [post_processors]
+
+    # Check signature for return type
+    sig = inspect.signature(func)
+    return_constraint = sig.return_annotation
+    assert 'typing' not in str(return_constraint), "Return type must be of base type not generic Typing object, e.g. int, str, list, etc."
+
+    # Prepare the single argument container
+    argument.prop.engine = engine
+    argument.prop.instances = instances
+    argument.prop.instance_type = type(instances[0]) if instances else None
+    argument.prop.signature = sig
+    argument.prop.func = func
+    argument.prop.constraints = constraints
+    argument.prop.return_constraint = return_constraint
+    argument.prop.default = default
+    argument.prop.limit = limit
+    argument.prop.trials = trials
+    argument.prop.pre_processors = pre_processors
+    argument.prop.post_processors = post_processors
+
+    # Pre-process all inputs
+    processed_inputs = []
+    for instance in instances:
+        processed_input = ''
+        if pre_processors and not argument.prop.raw_input:
+            for pp in pre_processors:
+                argument.prop.instance = instance  # Set current instance for preprocessor
+                t = pp(argument)
+                processed_input += t if t is not None else ''
+        else:
+            if argument.args and len(argument.args) > 0:
+                processed_input += ' '.join([str(a) for a in argument.args])
+
+        if not argument.prop.raw_input:
+            processed_inputs.append(processed_input)
+        else:
+            processed_inputs.append(instance)
+
+    argument.prop.processed_input = processed_inputs
+
+    # Execute queries in batch
+    results = []
+    metadata = None
+    for _ in range(trials):
+        try:
+            results, metadata = _execute_query(engine, post_processors, return_constraint, argument)
+            break
+        except Exception as e:
+            logging.error(f"Failed to execute batch query: {str(e)}")
+            traceback.print_exc()
+            if _ == trials - 1:
+                # If max retries reached, use default implementations or raise exception
+                results = [func(instance, *argument.args, **argument.signature_kwargs) or default for instance in instances]
+                if all(r is None for r in results) and not default:
+                    raise e
+
+    # Process results based on return type and limit
+    processed_results = []
+    for rsp in results:
+        limit_ = argument.prop.limit if argument.prop.limit else (len(rsp) if hasattr(rsp, '__len__') else None)
+
+        if limit_ is not None:
+            if return_constraint == str and isinstance(rsp, list):
+                rsp = '\n'.join(rsp[:limit_])
+            elif return_constraint in (list, set, tuple):
+                rsp = return_constraint(list(rsp)[:limit_])
+            elif return_constraint == dict:
+                keys = list(rsp.keys())[:limit_]
+                rsp = {k: rsp[k] for k in keys}
+
+        processed_results.append(rsp)
+
+    if argument.prop.return_metadata:
+        return processed_results, metadata
+
+    return processed_results
 
 class EngineRepository(object):
     _instance = None
@@ -324,7 +463,11 @@ class EngineRepository(object):
         self = EngineRepository()
         engine = self.get(engine)
         if engine:
-            return _process_query(engine, *args, **kwargs)
+            engine_allows_batching = getattr(engine, 'allows_batching', False)
+            if not engine_allows_batching:
+                return _process_query(engine, *args, **kwargs)
+            else:
+                return _process_query_batch(engine, *args, **kwargs)
         raise ValueError(f"No engine named {engine} is registered.")
 
     @staticmethod

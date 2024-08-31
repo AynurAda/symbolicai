@@ -4,6 +4,7 @@ import traceback
 import importlib
 import pkgutil
 import logging
+import warnings
 
 from enum import Enum
 from typing import Callable, Dict, List, Optional
@@ -58,7 +59,7 @@ def _cast_return_type(rsp: Any, return_constraint: Type, engine_probabilistic_bo
         try:
             res = ast.literal_eval(rsp)
         except Exception as e:
-            logging.warn(f"Failed to cast return type to {return_constraint} for {str(rsp)}")
+            warnings.warn(f"Failed to cast return type to {return_constraint} for {str(rsp)}", UserWarning)
             res = rsp
         assert res is not None, f"Return type cast failed! Check if the return type is correct or post_processors output matches desired format: {str(rsp)}"
         return res
@@ -120,7 +121,7 @@ def _execute_query(engine, post_processors, return_constraint, argument) -> List
         try:
             res = ast.literal_eval(rsp)
         except Exception as e:
-            logging.warn(f"Failed to cast return type to {return_constraint} for {str(rsp)}")
+            warnings.warn(f"Failed to cast return type to {return_constraint} for {str(rsp)}", UserWarning)
             res = rsp
         assert res is not None, "Return type cast failed! Check if the return type is correct or post_processors output matches desired format: " + str(
             rsp)
@@ -182,6 +183,7 @@ def _limit_number_results(rsp: Any, argument, return_constraint: Type) -> Any:
     elif limit_ is not None and limit_ > 1 and return_constraint == tuple:
         rsp = tuple(list(rsp)[:limit_])
     return rsp
+
 
 def _process_query(engine,
                    instance,
@@ -307,6 +309,7 @@ def _prepare_argument(argument: Any, engine: Any, instances: List[Any], func: Ca
     })
     return argument
 
+
 def _apply_preprocessors(argument, instance: Any, pre_processors: Optional[List[PreProcessor]]) -> str:
     processed_input = ''
     if pre_processors and not argument.prop.raw_input:
@@ -319,6 +322,15 @@ def _apply_preprocessors(argument, instance: Any, pre_processors: Optional[List[
        processed_input = instance
     return processed_input
 
+def _execute_query_fallback(func, instance, argument, default):
+    try:
+        result = func(instance, *argument.args, **argument.signature_kwargs)
+        return result if result is not None else default
+    except Exception as e:
+        if default is None:
+            raise e
+        return default
+    
 def _process_query_batch(engine,
                          instance,
                          func: Callable,
@@ -353,10 +365,8 @@ def _process_query_batch(engine,
             logging.error(f"Failed to execute batch query: {str(e)}")
             traceback.print_exc()
             if _ == trials - 1:
-                # If max retries reached, use default implementations or raise exception
-                results = [func(instance, *argument.args, **argument.signature_kwargs) or default for instance in
-                           instances]
-                if any(r is None for r in results) and not default:
+                results = [_execute_query_fallback(func, instance, argument, default) for instance in instances]
+                if any(r is None for r in results):
                     raise e
 
     limited_results = []

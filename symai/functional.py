@@ -71,12 +71,19 @@ def _cast_return_type(rsp: Any, return_constraint: Type, engine_probabilistic_bo
     elif return_constraint == inspect._empty:
         return rsp
     else:
-        if not isinstance(rsp, return_constraint):
+        try:
             return return_constraint(rsp)
-    return rsp
+        except (ValueError, TypeError):
+            raise ConstraintViolationException(f"Failed to cast {rsp} to {return_constraint}")
 
 
-def _postprocess_response(rsp: Any, return_constraint: Type, post_processors: Optional[List[PostProcessor]], argument: Any, engine_probabilistic_boolean_mode: ProbabilisticBooleanMode) -> Any:
+def _postprocess_response(
+    rsp: Any, 
+    return_constraint: Type, 
+    post_processors: Optional[List[PostProcessor]], 
+    argument: Any, 
+    engine_probabilistic_boolean_mode: ProbabilisticBooleanMode
+) -> Any:
     if post_processors:
         for pp in post_processors:
             rsp = pp(rsp, argument)
@@ -169,19 +176,21 @@ def _execute_query_batch(engine, post_processors: Optional[List], return_constra
     return post_processed_responses, metadata
 
 
-def _limit_number_results(rsp: Any, argument, return_constraint: Type) -> Any:
+def _limit_number_results(rsp: Any, argument, return_type):
     limit_ = argument.prop.limit if argument.prop.limit else (len(rsp) if hasattr(rsp, '__len__') else None)
-    if limit_ is not None and limit_ > 1 and return_constraint == str and type(rsp) == list:
-        rsp = '\n'.join(rsp[:limit_])
-    elif limit_ is not None and limit_ > 1 and return_constraint == list:
-        rsp = rsp[:limit_]
-    elif limit_ is not None and limit_ > 1 and return_constraint == dict:
-        keys = list(rsp.keys())
-        rsp = {k: rsp[k] for k in keys[:limit_]}
-    elif limit_ is not None and limit_ > 1 and return_constraint == set:
-        rsp = set(list(rsp)[:limit_])
-    elif limit_ is not None and limit_ > 1 and return_constraint == tuple:
-        rsp = tuple(list(rsp)[:limit_])
+    # the following line is different from original code to make it work for iterable return types when the limit is 1
+    if limit_ is not None:
+        if return_type == str and isinstance(rsp, list):
+            return '\n'.join(rsp[:limit_])
+        elif return_type == list:
+            return rsp[:limit_]
+        elif return_type == dict:
+            keys = list(rsp.keys())
+            return {k: rsp[k] for k in keys[:limit_]}
+        elif return_type == set:
+            return set(list(rsp)[:limit_])
+        elif return_type == tuple:
+            return tuple(list(rsp)[:limit_])
     return rsp
 
 
@@ -317,8 +326,9 @@ def _apply_preprocessors(argument, instance: Any, pre_processors: Optional[List[
         for pp in pre_processors:
             t = pp(argument)
             processed_input += t if t is not None else ''
-    elif argument.args and len(argument.args) > 0:
-       # processed_input += ' '.join([str(a) for a in argument.args])
+    elif argument.args and len(argument.args) > 0 and argument.prop.raw_input:
+       processed_input += ' '.join([str(a) for a in argument.args])
+    else:
        processed_input = instance
     return processed_input
 

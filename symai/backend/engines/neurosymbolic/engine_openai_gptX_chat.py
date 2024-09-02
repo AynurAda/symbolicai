@@ -129,7 +129,6 @@ class GPTXChatEngine(Engine, OpenAIMixin):
         self.except_remedy       = None
 
         self.client    = openai.Client(api_key=openai.api_key)
-        self.allows_batching = True
 
     def id(self) -> str:
         if   self.config.get('NEUROSYMBOLIC_ENGINE_MODEL') and \

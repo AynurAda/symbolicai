@@ -1,7 +1,5 @@
 import pytest
-import sys, os
-sys.path.append('/Users/aynur/aynur/projects/')
-from symbolicai.symai.functional import _execute_query_fallback
+from symai.functional import _execute_query_fallback
 
 class DummyArgument:
     def __init__(self, args=(), kwargs={}):
@@ -50,8 +48,6 @@ def test_with_instance_and_kwargs():
     argument = DummyArgument((3,), {'y': 7})
     result = _execute_query_fallback(test_func, DummyInstance(), argument, None)
     assert result == 15
-
-# Additional tests
 
 def test_different_default_types():
     def test_func(instance):

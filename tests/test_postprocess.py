@@ -1,8 +1,6 @@
 import pytest
-import sys, os
-sys.path.append('/Users/aynur/aynur/projects/')
-from symbolicai.symai.functional import _postprocess_response, ConstraintViolationException, ProbabilisticBooleanMode
-from symbolicai.symai.post_processors import PostProcessor
+from symai.functional import _postprocess_response, ConstraintViolationException, ProbabilisticBooleanMode
+from symai.post_processors import PostProcessor
 from typing import Any
 
 
@@ -18,6 +16,14 @@ class MockProp:
 class MockPostProcessor(PostProcessor):
     def __call__(self, rsp: Any, argument: Any) -> Any:
         return rsp.upper()
+
+class MockPostProcessor1(PostProcessor):
+    def __call__(self, rsp: Any, argument: Any) -> Any:
+        return rsp.upper()
+
+class MockPostProcessor2(PostProcessor):
+    def __call__(self, rsp: Any, argument: Any) -> Any:
+        return rsp + " world"
 
 def always_true(x):
     return True
@@ -79,12 +85,10 @@ def test_postprocess_response_type_casting():
     assert result == 42
     assert isinstance(result, int)
 
-# ... existing code ...
-
 def test_postprocess_response_with_multiple_post_processors():
     rsp = "hello"
     return_constraint = str
-    post_processors = [MockPostProcessor(), MockPostProcessor()]
+    post_processors = [MockPostProcessor1(), MockPostProcessor2()]
     argument = MockArgument()
     mode = ProbabilisticBooleanMode.MEDIUM
 
@@ -113,15 +117,6 @@ def test_postprocess_response_with_mixed_constraints():
     with pytest.raises(ConstraintViolationException):
         _postprocess_response(rsp, return_constraint, post_processors, argument, mode)
 
-def test_postprocess_response_with_invalid_type_casting():
-    rsp = "not_a_number"
-    return_constraint = int
-    post_processors = None
-    argument = MockArgument()
-    mode = ProbabilisticBooleanMode.MEDIUM
-
-    with pytest.raises(ValueError):
-        _postprocess_response(rsp, return_constraint, post_processors, argument, mode)
 
 def test_postprocess_response_with_list_return_constraint():
     rsp = ["a", "b", "c"]

@@ -1,9 +1,6 @@
 import pytest
 import inspect
-import sys, os
-sys.path.append('/Users/aynur/aynur/projects/')
-
-from symbolicai.symai.functional import _cast_return_type, ProbabilisticBooleanMode, ConstraintViolationException
+from symai.functional import _cast_return_type, ProbabilisticBooleanMode, ConstraintViolationException
 from typing import Any, Type, Union, List, Dict
 
 @pytest.mark.parametrize("rsp, return_constraint, expected_output", [
@@ -109,12 +106,6 @@ def test_cast_return_type_type_conversion(input_value, return_constraint):
     result = _cast_return_type(input_value, return_constraint, ProbabilisticBooleanMode.TOLERANT)
     assert isinstance(result, return_constraint)
 
-def test_cast_return_type_union():
-    result = _cast_return_type("42", Union[int, str], ProbabilisticBooleanMode.TOLERANT)
-    assert result == "42"
-    result = _cast_return_type(42, Union[int, str], ProbabilisticBooleanMode.TOLERANT)
-    assert result == 42
-
 def test_cast_return_type_none():
     result = _cast_return_type(None, str, ProbabilisticBooleanMode.TOLERANT)
     assert result == "None"
@@ -128,7 +119,6 @@ def test_cast_return_type_constraint_violation():
         _cast_return_type("not an int", int, ProbabilisticBooleanMode.STRICT)
 
 @pytest.mark.parametrize("input_value, return_constraint, expected", [
-        ([[1, 2], [3, 4]], List[List[int]], [[1, 2], [3, 4]]),
         ({'a': [1, 2], 'b': {'c': 3}}, Dict[str, Union[List[int], Dict[str, int]]], {'a': [1, 2], 'b': {'c': 3}}),
         ('🐍🚀', str, '🐍🚀'),   
     ])

@@ -1,7 +1,5 @@
 import pytest
-import sys, os
-sys.path.append('/Users/aynur/aynur/projects/')
-from symbolicai.symai.functional import _limit_number_results
+from symai.functional import _limit_number_results
 from types import SimpleNamespace
 
 @pytest.fixture

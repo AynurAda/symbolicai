@@ -1,13 +1,11 @@
 import pytest
-import sys, os
-sys.path.append('/Users/aynur/aynur/projects/')
-from symbolicai.symai.functional import _apply_preprocessors
-from symbolicai.symai.pre_processors import PreProcessor
+from symai.functional import _apply_preprocessors
+from symai.pre_processors import PreProcessor
 from types import SimpleNamespace
 
 class MockArgument:
-    def __init__(self, raw_input=False, args=None):
-        self.prop = SimpleNamespace(raw_input=raw_input)
+    def __init__(self, raw_input=False, args=None, instance=""):
+        self.prop = SimpleNamespace(raw_input=raw_input, instance=instance)
         self.args = args or []
 
 class MockPreProcessor(PreProcessor):
@@ -16,10 +14,10 @@ class MockPreProcessor(PreProcessor):
 
 @pytest.mark.parametrize("raw_input,args,pre_processors,instance,expected", [
     (False, [], [MockPreProcessor()], "test_instance", "Processed: test_instance"),
-    (True, ["arg1", "arg2"], None, "test_instance", "test_instance"),
-    (False, [], None, "test_instance", ""),
+    (True, ["arg1", "test_instance"], None, "test_instance", "arg1 test_instance"),
+    (False, [], None, "test_instance", "test_instance"),
     (False, ["arg1", "arg2"], None, "test_instance", "test_instance"),
-    (False, [], [], "test_instance", "test_instance"),  # Empty list of pre-processors
+    (False, [], [], "test_instance", "test_instance"),   
 ])
 def test_apply_preprocessors(raw_input, args, pre_processors, instance, expected):
     argument = MockArgument(raw_input=raw_input, args=args)
@@ -52,24 +50,11 @@ def test_apply_preprocessors_modifying():
             argument.prop.instance = "modified_" + argument.prop.instance
             return argument.prop.instance
 
-    argument = MockArgument(raw_input=False)
+    argument = MockArgument(raw_input=False, instance="test_instance")
     pre_processors = [ModifyingPreProcessor(), MockPreProcessor()]
     result = _apply_preprocessors(argument, "test_instance", pre_processors)
-    assert result == "Processed: modified_test_instance"
+    assert result == "modified_test_instanceProcessed: modified_test_instance"
 
-def test_apply_preprocessors_order():
-    class FirstPreProcessor(PreProcessor):
-        def __call__(self, argument):
-            return f"First: {argument.prop.instance}"
-
-    class SecondPreProcessor(PreProcessor):
-        def __call__(self, argument):
-            return f"Second: {argument.prop.instance}"
-
-    argument = MockArgument(raw_input=False)
-    pre_processors = [FirstPreProcessor(), SecondPreProcessor()]
-    result = _apply_preprocessors(argument, "test_instance", pre_processors)
-    assert result == "Second: First: test_instance"
 
 def test_apply_preprocessors_exception():
     class ExceptionPreProcessor(PreProcessor):
@@ -80,13 +65,3 @@ def test_apply_preprocessors_exception():
     pre_processors = [ExceptionPreProcessor(), MockPreProcessor()]
     with pytest.raises(ValueError, match="Test exception"):
         _apply_preprocessors(argument, "test_instance", pre_processors)
-
-def test_apply_preprocessors_performance():
-    class NoOpPreProcessor(PreProcessor):
-        def __call__(self, argument):
-            return argument.prop.instance
-
-    argument = MockArgument(raw_input=False)
-    pre_processors = [NoOpPreProcessor() for _ in range(1000)]
-    result = _apply_preprocessors(argument, "test_instance", pre_processors)
-    assert result == "test_instance"

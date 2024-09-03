@@ -302,20 +302,19 @@ def _prepare_argument(argument: Any, engine: Any, instances: List[Any], func: Ca
     return_constraint = sig.return_annotation
     assert 'typing' not in str(return_constraint), "Return type must be of base type not generic Typing object, e.g. int, str, list, etc."
 
-    argument.prop.update({
-        'engine': engine,
-        'instances': instances,
-        'instance_type': type(instances[0]) if instances else None,
-        'signature': sig,
-        'func': func,
-        'constraints': constraints,
-        'return_constraint': return_constraint,
-        'default': default,
-        'limit': limit,
-        'trials': trials,
-        'pre_processors': pre_processors,
-        'post_processors': post_processors
-    })
+    argument.prop.engine = engine
+    argument.prop.instances = instances
+    argument.prop.instance_type = type(instances[0]) if instances else None
+    argument.prop.signature = sig
+    argument.prop.func = func
+    argument.prop.constraints = constraints
+    argument.prop.return_constraint = return_constraint
+    argument.prop.default = default
+    argument.prop.limit = limit
+    argument.prop.trials = trials
+    argument.prop.pre_processors = pre_processors
+    argument.prop.post_processors = post_processors
+
     return argument
 
 

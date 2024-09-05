@@ -503,7 +503,7 @@ class EngineRepository(object):
         engine = self.get(engine)
         if engine:
             engine_allows_batching = getattr(engine, 'allows_batching', False)
-            batching_requested = kwargs.get('batching', False)
+            batching_requested = kwargs["argument"].prop.batching
             if engine_allows_batching and batching_requested:
                 return _process_query_batch(engine, *args, **kwargs)
             else:

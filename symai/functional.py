@@ -503,10 +503,11 @@ class EngineRepository(object):
         engine = self.get(engine)
         if engine:
             engine_allows_batching = getattr(engine, 'allows_batching', False)
-            if not engine_allows_batching:
-                return _process_query(engine, *args, **kwargs)
-            else:
+            batching_requested = kwargs.get('batching', False)
+            if engine_allows_batching and batching_requested:
                 return _process_query_batch(engine, *args, **kwargs)
+            else:
+                return _process_query(engine, *args, **kwargs)
         raise ValueError(f"No engine named {engine} is registered.")
 
     @staticmethod

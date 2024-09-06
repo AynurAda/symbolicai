@@ -244,6 +244,11 @@ class QueryPreProcessor(PreProcessor):
         query = f"Context: {argument.prop.context}\n"
         return f"{val}{query}Answer:"
 
+class QueryPreProcessorBatch(PreProcessor):
+    def __call__(self, argument) -> Any:
+        val   = f'Data:\n{str(argument.prop.instance)}\n'
+        query = f"Context: {argument.prop.context}\n"
+        return f"{val}{query}Answer:"
 
 class SufficientInformationPreProcessor(PreProcessor):
     def __call__(self, argument) -> Any:

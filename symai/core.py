@@ -123,6 +123,7 @@ def few_shot(prompt: str = '',
             decorator_kwargs['prompt']   = prompt
             decorator_kwargs['examples'] = examples
             argument = Argument(signature_args, signature_kwargs, decorator_kwargs)
+            print(argument)
             return EngineRepository.query(
                                 engine='neurosymbolic',
                                 instance=instance,

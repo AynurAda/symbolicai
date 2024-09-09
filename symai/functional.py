@@ -475,7 +475,7 @@ class EngineRepository(object):
         self = EngineRepository()
         engine = self.get(engine)
         if engine:
-            engine_allows_batching = getattr(engine, 'allows_batching', False)
+            engine_allows_batching = getattr(engine, 'allows_batching', True)
             if engine_allows_batching:
                 return _process_query_single(engine, *args, **kwargs)
             else:

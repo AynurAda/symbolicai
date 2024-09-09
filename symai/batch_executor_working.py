@@ -20,7 +20,7 @@ class TestExpression(Expression):
         return [instance.value, res.value, cube.value]
 
 class Publisher:
-    def __init__(self, num_workers, engine, dataset, batch_size=5):
+    def __init__(self, expr, num_workers, engine, dataset, batch_size=5):
         self.num_workers = num_workers
         self.engine = engine
         self.dataset = dataset
@@ -33,9 +33,10 @@ class Publisher:
         self.results_queue = {}
         self.result_events = {}
         self.pending_tasks = 0
+        self.expr = expr
 
     def process_data(self, data_point):
-        expr = TestExpression(data_point)
+        expr = self.expr(data_point)
         return expr.forward(executor_callback=self.executor_callback)
 
     def executor_callback(self, argument):
@@ -61,7 +62,7 @@ class Publisher:
                 self.arguments = self.arguments[self.batch_size:]
                 self.pending_tasks -= len(current_arguments)
             if current_arguments:  # Only process if there are arguments
-                results = _execute_query_batch(self.engine, current_arguments)
+                results = self.engine(self.engine, current_arguments)
                 with self.lock:
                     for arg, result in zip(current_arguments, results):
                         result_id = id(arg)
@@ -93,23 +94,12 @@ class Publisher:
 
         return [self.results.get(data_point) for data_point in sorted(self.dataset)]
 
-def _execute_query_batch(engine, arguments):
-    print(f"executing batch of size {len(arguments)}")
-    results = []
-    for argument in arguments:
-        if argument.prop.preview:
-            results.append(engine.preview(argument))
-        else:
-            outputs = engine(argument)
-            results.append(outputs)   
-    return results
-
 def main():
     print("Main: Starting")
     dataset = list(range(1, 20))
     num_workers = 10   
     batch_size = 10
-    publisher = Publisher(num_workers, engine, dataset, batch_size)
+    publisher = Publisher(TestExpression, num_workers, engine, dataset, batch_size)
     results = publisher.run()
     
     print("Execution completed. Results:")

@@ -60,7 +60,7 @@ class Publisher:
                 self.arguments = self.arguments[self.batch_size:]
                 self.pending_tasks -= len(current_arguments)
             if current_arguments:  # Only process if there are arguments
-                results = self.engine.forward(current_arguments)
+                results = self.engine(current_arguments)
                 with self.lock:
                     for arg, result in zip(current_arguments, results):
                         result_id = id(arg)

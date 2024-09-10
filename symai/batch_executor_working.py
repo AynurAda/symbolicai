@@ -53,7 +53,7 @@ class Publisher:
 
     def execute_queries(self):
         while not self.processing_complete.is_set() or self.pending_tasks > 0:
-            self.batch_ready.wait(timeout=1.0)  # Add timeout
+            self.batch_ready.wait()  # Add timeout
             self.batch_ready.clear()
             with self.lock:
                 current_arguments = self.arguments[:self.batch_size]

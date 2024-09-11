@@ -78,7 +78,7 @@ def _cast_return_type(rsp: Any, return_constraint: Type, engine_probabilistic_bo
 
 
 def _postprocess_response(outputs, return_constraint, post_processors, argument):
-    rsp, metadata = outputs[0][0], outputs[1]
+    rsp, metadata = outputs[0], outputs[1]
     argument.prop.outputs = outputs
     argument.prop.metadata = metadata
 

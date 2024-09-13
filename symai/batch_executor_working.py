@@ -23,8 +23,8 @@ class BatchScheduler:
         self.pending_tasks_update = threading.Event()
  
     def process_data(self, data_point):
-        expr = self.expr(data_point)
-        return expr.forward(executor_callback=self.executor_callback)
+        expr = self.expr()
+        return expr.forward(data_point, executor_callback=self.executor_callback)
  
     def executor_callback(self, argument):
         with self.lock:

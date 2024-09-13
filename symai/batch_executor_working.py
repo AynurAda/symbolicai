@@ -1,7 +1,7 @@
 import concurrent.futures
-import threading
-import random
 import logging
+import threading
+
 lgr = logging.getLogger()
 lgr.setLevel(logging.CRITICAL)
 
@@ -23,8 +23,9 @@ class BatchScheduler:
         self.pending_tasks_update = threading.Event()
  
     def process_data(self, data_point):
-        expr = self.expr()
-        return expr.forward(data_point, executor_callback=self.executor_callback)
+        expr = self.expr
+        print("data_point:", data_point)
+        return expr(data_point, executor_callback=self.executor_callback)
  
     def executor_callback(self, argument):
         with self.lock:
@@ -69,7 +70,7 @@ class BatchScheduler:
                 data_point = future_to_data[future]
                 try:
                     final_result = future.result()
-                    self.results[data_point] = final_result[0]
+                    self.results[data_point] = final_result
                 except Exception as exc:
                     print(f'Data point {data_point} generated an exception: {exc}')
                 finally:
@@ -79,5 +80,5 @@ class BatchScheduler:
         print("processing complete")
         self.batch_ready.set()   
         query_thread.join()
-        return [self.results.get(data_point) for data_point in sorted(self.dataset)]
+        return [self.results.get(data_point) for data_point in self.dataset]
  

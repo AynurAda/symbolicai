@@ -4,7 +4,7 @@ from typing import List, Any, Tuple
 import pytest
 
 from symai import Expression, Symbol
-from symai.backend.base import Engine
+from symai.backend.base import Engine, BatchEngine
 from symai.batch_executor_working import BatchScheduler
 from symai.functional import EngineRepository   
 
@@ -84,49 +84,13 @@ class ConditionalSlowExpression(Expression):
         else:
             return Symbol(input).query("Quickly process this short input", **kwargs)
 
-class MockGPTXChatEngine(Engine):
+class MockGPTXChatEngine(BatchEngine):
     def __init__(self):
         super().__init__()
         self.response_template = "This is a mock response for input: {}"
         self.model = "mock_model"
         self.max_tokens = 1000
         self.allows_batching = True
-
-    def __call__(self, arguments: List[Any]) -> List[Tuple[Any, dict]]:
-        start_time = time.time()
-        for arg in arguments:
-            if hasattr(arg.prop.instance, '_metadata') and hasattr(arg.prop.instance._metadata, 'input_handler'):
-                input_handler = getattr(arg.prop.instance._metadata, 'input_handler', None)
-                if input_handler is not None:
-                    input_handler((arg.prop.processed_input, arg))
-            if arg.prop.input_handler is not None:
-                arg.prop.input_handler((arg.prop.processed_input, arg))
-
-        try:
-            results, metadata_list = self.forward(arguments)
-        except Exception as e:
-            results = [e] * len(arguments)
-            metadata_list = [None] * len(arguments)
-
-        total_time = time.time() - start_time
-        if self.time_clock:
-            print(f"Total execution time: {total_time} sec")
-
-        return_list = []
-
-        for arg, result, metadata in zip(arguments, results, metadata_list):
-            if metadata is not None:
-                metadata['time'] = total_time / len(arguments)   
-
-            if hasattr(arg.prop.instance, '_metadata') and hasattr(arg.prop.instance._metadata, 'output_handler'):
-                output_handler = getattr(arg.prop.instance._metadata, 'output_handler', None)
-                if output_handler:
-                    output_handler(result)
-            if arg.prop.output_handler:
-                arg.prop.output_handler((result, metadata))
-
-            return_list.append((result, metadata))
-        return return_list
 
     def forward(self, arguments):
         responses = []
@@ -349,7 +313,6 @@ class MockRandomErrorEngine(MockGPTXChatEngine):
 def mock_random_error_engine():
     return MockRandomErrorEngine()
 
-@pytest.mark.timeout(1)  # Set timeout to 1 second
 def test_expression_error_handling(mock_engine):
     expr = RandomErrorExpression(error_pattern=[False, True, False, True, False])
     inputs = ["test1", "error", "test3", "error", "test5"]

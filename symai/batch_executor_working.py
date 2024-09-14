@@ -13,7 +13,7 @@ class BatchScheduler:
         self.results = {}
         self.arguments = []
         self.lock = threading.Lock()
-        self.batch_size = batch_size
+        self.batch_size = min(batch_size, len(dataset) if dataset else 1, num_workers)
         self.batch_ready = threading.Event()
         self.processing_complete = threading.Event()
         self.llm_responses = {}
@@ -22,10 +22,13 @@ class BatchScheduler:
         self.expr = expr
         self.pending_tasks_update = threading.Event()
  
-    def process_data(self, data_point):
+    def single_expression(self, data_point):
         expr = self.expr
-        print("data_point:", data_point)
-        return expr(data_point, executor_callback=self.executor_callback)
+        try:
+            return expr(data_point, executor_callback=self.executor_callback)
+        except Exception as e:
+            print(f"Data point {data_point} generated an exception: {str(e)}")
+            return e  # Return the exception object itself
  
     def executor_callback(self, argument):
         with self.lock:
@@ -56,7 +59,6 @@ class BatchScheduler:
                     with self.lock:
                         arg_id = id(arg)
                         self.llm_responses[arg_id] = llm_response
-                        print(llm_response)
                         self.llm_response_ready[arg_id].set()
             if self.arguments:
                 self.batch_ready.set()
@@ -65,7 +67,7 @@ class BatchScheduler:
         query_thread = threading.Thread(target=self.execute_queries)
         query_thread.start()
         with concurrent.futures.ThreadPoolExecutor(max_workers=self.num_workers) as executor:
-            future_to_data = {executor.submit(self.process_data, data_point): data_point for data_point in self.dataset}
+            future_to_data = {executor.submit(self.single_expression, data_point): data_point for data_point in self.dataset}
             for future in concurrent.futures.as_completed(future_to_data):
                 data_point = future_to_data[future]
                 try:
@@ -81,4 +83,5 @@ class BatchScheduler:
         self.batch_ready.set()   
         query_thread.join()
         return [self.results.get(data_point) for data_point in self.dataset]
- 
+
+

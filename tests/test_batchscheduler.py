@@ -1,20 +1,22 @@
-import random
 import time
-
+import itertools
+from typing import List, Any, Tuple 
 import pytest
 
-from symai import Expression
+from symai import Expression, Symbol
 from symai.backend.base import Engine
 from symai.batch_executor_working import BatchScheduler
+from symai.functional import EngineRepository   
 
+from pytest import approx
 
 class TestExpression(Expression):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
     
     def forward(self, input, **kwargs):
-        print(f"Processing: {input}")
-        return f"Processed: {input}"
+        res = Symbol(input).query("Summarize this input", **kwargs)
+        return res.value
 
 class NestedExpression(Expression):
     def __init__(self, **kwargs):
@@ -22,8 +24,8 @@ class NestedExpression(Expression):
         self.nested_expr = TestExpression()
     
     def forward(self, input, **kwargs):
-        nested_result = self.nested_expr(input, **kwargs)  # Pass kwargs here
-        return f"Nested result: {nested_result}"
+        nested_result = self.nested_expr(input, **kwargs)
+        return Symbol(nested_result).query("Elaborate on this result", **kwargs)
 
 class DoubleNestedExpression(Expression):
     def __init__(self, **kwargs):
@@ -32,9 +34,9 @@ class DoubleNestedExpression(Expression):
         self.nested_expr2 = NestedExpression()
     
     def forward(self, input, **kwargs):
-        result1 = self.nested_expr1(input, **kwargs)   
-        result2 = self.nested_expr2(input, **kwargs)  
-        return f"Double nested results: {result1} and {result2}"
+        result1 = self.nested_expr1(input, **kwargs)
+        result2 = self.nested_expr2(input, **kwargs)
+        return Symbol(f"{result1} and {result2}").query("Combine these results", **kwargs)
 
 class ConditionalExpression(Expression):
     def __init__(self, **kwargs):
@@ -42,21 +44,19 @@ class ConditionalExpression(Expression):
         self.nested_expr = NestedExpression()
     
     def forward(self, input, **kwargs):
-        print(input)
-        print("hohohoho:", input)
         if len(input) > 10:
-            return f"Conditional: {self.nested_expr(input, **kwargs)}"   
+            return Symbol(input).query("Analyze this long input", **kwargs)
         else:
-            return f"Conditional: Input too short, not processing further"
-        
+            return Symbol(input).query("Briefly comment on this short input", **kwargs)
+
 class SlowExpression(Expression):
     def __init__(self, delay=5, **kwargs):
         super().__init__(**kwargs)
         self.delay = delay
     
     def forward(self, input, **kwargs):
-        time.sleep(self.delay)   
-        return f"Slow processed (after {self.delay} seconds): {input}"
+        time.sleep(self.delay)
+        return Symbol(input).query(f"Process this input after a {self.delay} second delay", **kwargs)
 
 class DoubleNestedExpressionSlow(Expression):
     def __init__(self, **kwargs):
@@ -69,7 +69,7 @@ class DoubleNestedExpressionSlow(Expression):
         result1 = self.nested_expr1(input, **kwargs)
         result2 = self.nested_expr2(input, **kwargs)
         slow_result = self.slow_expr(input, **kwargs)
-        return f"Double nested results: {result1}, {result2}, and {slow_result}"
+        return Symbol(f"{result1}, {result2}, and {slow_result}").query("Synthesize these results", **kwargs)
 
 class ConditionalSlowExpression(Expression):
     def __init__(self, delay=5, threshold=10, **kwargs):
@@ -80,66 +80,84 @@ class ConditionalSlowExpression(Expression):
     
     def forward(self, input, **kwargs):
         if len(input) > self.threshold:
-            return f"Conditional Slow: {self.slow_expr(input, **kwargs)}"
+            return Symbol(self.slow_expr(input, **kwargs)).query("Analyze this slow-processed long input", **kwargs)
         else:
-            return f"Conditional Slow: Input too short, processed quickly: {input}"
-        
+            return Symbol(input).query("Quickly process this short input", **kwargs)
 
 class MockGPTXChatEngine(Engine):
     def __init__(self):
         super().__init__()
-        self.response_template = "This is a mock response with random number: {}"
-        self.model = "gpt-3.5-turbo"
+        self.response_template = "This is a mock response for input: {}"
+        self.model = "mock_model"
         self.max_tokens = 1000
         self.allows_batching = True
 
+    def __call__(self, arguments: List[Any]) -> List[Tuple[Any, dict]]:
+        start_time = time.time()
+        for arg in arguments:
+            if hasattr(arg.prop.instance, '_metadata') and hasattr(arg.prop.instance._metadata, 'input_handler'):
+                input_handler = getattr(arg.prop.instance._metadata, 'input_handler', None)
+                if input_handler is not None:
+                    input_handler((arg.prop.processed_input, arg))
+            if arg.prop.input_handler is not None:
+                arg.prop.input_handler((arg.prop.processed_input, arg))
+
+        try:
+            results, metadata_list = self.forward(arguments)
+        except Exception as e:
+            results = [e] * len(arguments)
+            metadata_list = [None] * len(arguments)
+
+        total_time = time.time() - start_time
+        if self.time_clock:
+            print(f"Total execution time: {total_time} sec")
+
+        return_list = []
+
+        for arg, result, metadata in zip(arguments, results, metadata_list):
+            if metadata is not None:
+                metadata['time'] = total_time / len(arguments)   
+
+            if hasattr(arg.prop.instance, '_metadata') and hasattr(arg.prop.instance._metadata, 'output_handler'):
+                output_handler = getattr(arg.prop.instance._metadata, 'output_handler', None)
+                if output_handler:
+                    output_handler(result)
+            if arg.prop.output_handler:
+                arg.prop.output_handler((result, metadata))
+
+            return_list.append((result, metadata))
+        return return_list
+
     def forward(self, arguments):
-        results = []
+        responses = []
+        metadata_list = []
         for argument in arguments:
             input_data = argument.prop.processed_input
-            random_number = random.randint(1, 1000)
-            mock_response = self.response_template.format(random_number)
-            mock_response += f" Input: {input_data}"
+            mock_response = self.response_template.format(input_data)
+            mock_response = f"{mock_response}"
+            responses.append(mock_response)
             
-            delay = random.uniform(0.1, 0.5)
-            time.sleep(delay)
-
-            results.append((mock_response, {"usage": {"total_tokens": random.randint(50, 200)}}))
+            individual_metadata = {
+                "usage": {
+                    "total_tokens": len(mock_response.split()),   
+                    "prompt_tokens": len(input_data.split()),
+                    "completion_tokens": len(mock_response.split()) - len(input_data.split())
+                }
+            }
+            metadata_list.append(individual_metadata)
         
-        return results
+        return responses, metadata_list
 
     def prepare(self, argument):
-        # Hardcode attributes similar to GPTXChatEngine
-        argument.prop.prepared_input = [
-            {"role": "system", "content": "You are a helpful assistant."},
-            {"role": "user", "content": "This is a mock user input."}
-        ]
-        argument.prop.raw_input = False
-        argument.prop.processed_input = "This is a mock processed input."
-        argument.prop.suppress_verbose_output = True
-        argument.prop.response_format = None
-        argument.prop.payload = None
-        argument.prop.examples = []
-        argument.prop.prompt = "This is a mock prompt."
-        argument.prop.template_suffix = None
-        argument.prop.parse_system_instructions = False
+        pass
 
-        # Add some mock kwargs
-        argument.kwargs = {
-            "model": self.model,
-            "max_tokens": self.max_tokens,
-            "temperature": 0.7,
-            "top_p": 1,
-            "frequency_penalty": 0,
-            "presence_penalty": 0,
-        }
+engine = MockGPTXChatEngine()
+EngineRepository.register("neurosymbolic", engine_instance=engine, allow_engine_override=True)
 
-    def compute_remaining_tokens(self, prompts: list) -> int:
-        return self.max_tokens
 
 @pytest.fixture
 def mock_engine():
-    return MockGPTXChatEngine()
+    return engine
 
 def test_simple_batch(mock_engine):
     expr = TestExpression()
@@ -147,27 +165,31 @@ def test_simple_batch(mock_engine):
     scheduler = BatchScheduler(expr, num_workers=2, engine=mock_engine, dataset=inputs)
     results = scheduler.run()
     assert len(results) == 3
-    assert results[0] == "Processed: test1"
-    assert results[1] == "Processed: test2"
-    assert results[2] == "Processed: test3"
+    for i, result in enumerate(results, 1):
+        assert f"test{i}" in str(result)
+        assert "Summarize this input" in str(result)
 
+@pytest.mark.timeout(1)   
 def test_nested_batch(mock_engine):
     expr = NestedExpression()
     inputs = ["nested1", "nested2"]
     scheduler = BatchScheduler(expr, num_workers=2, engine=mock_engine, dataset=inputs)
     results = scheduler.run()
     assert len(results) == 2
-    assert results[0] == "Nested result: Processed: nested1"
-    assert results[1] == "Nested result: Processed: nested2"
+    for i, result in enumerate(results, 1):
+        assert f"nested{i}" in str(result)
+        assert "Elaborate on this result" in str(result)
+        assert "Summarize this input" in str(result)
 
+@pytest.mark.timeout(1)   
 def test_conditional_batch(mock_engine):
     expr = ConditionalExpression()
     inputs = ["short", "this is a long input"]
     scheduler = BatchScheduler(expr, num_workers=2, engine=mock_engine, dataset=inputs)
     results = scheduler.run()
     assert len(results) == 2
-    assert results[0] == "Conditional: Input too short, not processing further"
-    assert results[1] == "Conditional: Nested result: Processed: this is a long input"
+    assert "Briefly comment on this short input" in str(results[0])
+    assert "Analyze this long input" in str(results[1])
 
 def test_slow_batch(mock_engine):
     expr = SlowExpression(delay=1)   
@@ -175,38 +197,39 @@ def test_slow_batch(mock_engine):
     scheduler = BatchScheduler(expr, num_workers=2, engine=mock_engine, dataset=inputs)
     results = scheduler.run()
     assert len(results) == 2
-    assert results[0] == "Slow processed (after 1 seconds): slow1"
-    assert results[1] == "Slow processed (after 1 seconds): slow2"
+    for i, result in enumerate(results, 1):
+        assert f"slow{i}" in str(result)
+        assert "Process this input after a 1 second delay" in str(result)
 
+@pytest.mark.timeout(1)  
 def test_double_nested_slow_batch(mock_engine):
     expr = DoubleNestedExpressionSlow()
     inputs = ["input1", "input2"]
     scheduler = BatchScheduler(expr, num_workers=2, engine=mock_engine, dataset=inputs)
     results = scheduler.run()
     assert len(results) == 2
-    expected_output = (
-        "Double nested results: Processed: input1, "
-        "Nested result: Processed: input1, and "
-        "Slow processed (after 5 seconds): input1"
-    )
-    assert results[0] == expected_output.replace("input1", "input1")
-    assert results[1] == expected_output.replace("input1", "input2")
-
+    for i, result in enumerate(results, 1):
+        assert f"input{i}" in str(result)
+        assert "Synthesize these results" in str(result)
+ 
 def test_simple_batch_variations(mock_engine):
     expr = TestExpression()
     inputs = ["test1", "test2", "test3", "test4", "test5", "test6"]
     
-    # Test with batch_size=2 and num_workers=3
     scheduler = BatchScheduler(expr, num_workers=3, batch_size=2, engine=mock_engine, dataset=inputs)
     results = scheduler.run()
     assert len(results) == 6
-    assert all(result.startswith("Processed: test") for result in results)
+    for i, result in enumerate(results, 1):
+        assert f"test{i}" in str(result)
+        assert "Summarize this input" in str(result)
     
-    # Test with batch_size=3 and num_workers=2
+    #Test with batch_size=3 and num_workers=2
     scheduler = BatchScheduler(expr, num_workers=2, batch_size=3, engine=mock_engine, dataset=inputs)
     results = scheduler.run()
     assert len(results) == 6
-    assert all(result.startswith("Processed: test") for result in results)
+    for i, result in enumerate(results, 1):
+        assert f"test{i}" in str(result)
+        assert "Summarize this input" in str(result)
 
 def test_nested_batch_variations(mock_engine):
     expr = NestedExpression()
@@ -216,13 +239,17 @@ def test_nested_batch_variations(mock_engine):
     scheduler = BatchScheduler(expr, num_workers=4, batch_size=1, engine=mock_engine, dataset=inputs)
     results = scheduler.run()
     assert len(results) == 4
-    assert all(result.startswith("Nested result: Processed: nested") for result in results)
+    for i, result in enumerate(results, 1):
+        assert f"nested{i}" in str(result)
+        assert "Elaborate on this result" in str(result)
     
     # Test with batch_size=4 and num_workers=1
     scheduler = BatchScheduler(expr, num_workers=1, batch_size=4, engine=mock_engine, dataset=inputs)
     results = scheduler.run()
     assert len(results) == 4
-    assert all(result.startswith("Nested result: Processed: nested") for result in results)
+    for i, result in enumerate(results, 1):
+        assert f"nested{i}" in str(result)
+        assert "Elaborate on this result" in str(result)
 
 def test_conditional_batch_variations(mock_engine):
     expr = ConditionalExpression()
@@ -232,14 +259,10 @@ def test_conditional_batch_variations(mock_engine):
     scheduler = BatchScheduler(expr, num_workers=2, batch_size=2, engine=mock_engine, dataset=inputs)
     results = scheduler.run()
     assert len(results) == 4
-    
-    print("Results:", results)  # Add this line to see all results
-    
-    # Check each result individually
-    assert results[0] == "Conditional: Input too short, not processing further", f"Unexpected result for 'short': {results[0]}"
-    assert "Conditional: Nested result: Processed: this is a long input" in results[1], f"Unexpected result for 'this is a long input': {results[1]}"
-    assert results[2] == "Conditional: Input too short, not processing further", f"Unexpected result for 'another short': {results[2]}"
-    assert "Conditional: Nested result: Processed: yet another long input" in results[3], f"Unexpected result for 'yet another long input': {results[3]}"
+    assert "Briefly comment on this short input" in str(results[0]), f"Unexpected result for 'short': {results[0]}"
+    assert "Analyze this long input" in str(results[1]), f"Unexpected result for 'this is a long input': {results[1]}"
+    assert "Briefly comment on this short input" in str(results[2]), f"Unexpected result for 'another short': {results[2]}"
+    assert "Analyze this long input" in str(results[3]), f"Unexpected result for 'yet another long input': {results[3]}"
 
 def test_slow_batch_variations(mock_engine):
     expr = SlowExpression(delay=0.5)  # Reduced delay for faster testing
@@ -249,13 +272,17 @@ def test_slow_batch_variations(mock_engine):
     scheduler = BatchScheduler(expr, num_workers=3, batch_size=2, engine=mock_engine, dataset=inputs)
     results = scheduler.run()
     assert len(results) == 5
-    assert all(result.startswith("Slow processed (after 0.5 seconds): slow") for result in results)
+    for i, result in enumerate(results, 1):
+        assert f"slow{i}" in str(result)
+        assert "Process this input after a 0.5 second delay" in str(result)
     
     # Test with batch_size=5 and num_workers=1
     scheduler = BatchScheduler(expr, num_workers=1, batch_size=5, engine=mock_engine, dataset=inputs)
     results = scheduler.run()
     assert len(results) == 5
-    assert all(result.startswith("Slow processed (after 0.5 seconds): slow") for result in results)
+    for i, result in enumerate(results, 1):
+        assert f"slow{i}" in str(result)
+        assert "Process this input after a 0.5 second delay" in str(result)
 
 def test_double_nested_slow_batch_variations(mock_engine):
     expr = DoubleNestedExpressionSlow()
@@ -266,88 +293,100 @@ def test_double_nested_slow_batch_variations(mock_engine):
     results = scheduler.run()
     assert len(results) == 3
     for i, result in enumerate(results, 1):
-        assert result == (
-            f"Double nested results: Processed: input{i}, "
-            f"Nested result: Processed: input{i}, and "
-            f"Slow processed (after 5 seconds): input{i}"
-        )
+        assert f"input{i}" in str(result)
+        assert "Synthesize these results" in str(result)
     
     # Test with batch_size=3 and num_workers=1
     scheduler = BatchScheduler(expr, num_workers=1, batch_size=3, engine=mock_engine, dataset=inputs)
     results = scheduler.run()
     assert len(results) == 3
-    assert all(result.startswith(f"Double nested results: Processed: input") for result in results)
-
     for i, result in enumerate(results, 1):
-        expected = (
-            f"Double nested results: Processed: input{i}, "
-            f"Nested result: Processed: input{i}, and "
-            f"Slow processed (after 5 seconds): input{i}"
-        )
-        assert result == expected, f"Mismatch for input{i}"
+        assert f"input{i}" in str(result)
+        assert "Synthesize these results" in str(result)
 
 class RandomErrorExpression(Expression):
-    def __init__(self, error_rate=0.5, **kwargs):
+    def __init__(self, error_pattern, **kwargs):
         super().__init__(**kwargs)
-        self.error_rate = error_rate
+        self.error_pattern = error_pattern
+        self.counter = itertools.cycle(error_pattern)
     
     def forward(self, input, **kwargs):
-        if random.random() < self.error_rate:
+        if next(self.counter):
             raise ValueError("Simulated expression error")
-        return f"Processed: {input}"
+        return Symbol(input).query("Process this input without error", **kwargs)
 
 class MockRandomErrorEngine(MockGPTXChatEngine):
-    def __init__(self, error_rate=0.5):
+    def __init__(self):
         super().__init__()
-        self.error_rate = error_rate
+        self.response_template = "This is a mock response for input: {} from error engine"
 
     def forward(self, arguments):
-        results = []
-        for argument in arguments:
-            if random.random() < self.error_rate:
-                raise ValueError("Simulated engine error")
-            input_data = argument.prop.processed_input
-            random_number = random.randint(1, 1000)
-            mock_response = self.response_template.format(random_number)
-            mock_response += f" Input: {input_data}"
-            
-            delay = random.uniform(0.1, 0.5)
-            time.sleep(delay)
-
-            results.append((mock_response, {"usage": {"total_tokens": random.randint(50, 200)}}))
+        responses = []
+        metadata_list = []
         
-        return results
+        # Check if any input in the batch should trigger an error
+        if any("error" in argument.prop.processed_input for argument in arguments):
+            raise ValueError("Simulated engine error for the entire batch")
+        
+        for argument in arguments:
+            input_data = argument.prop.processed_input
+            
+            mock_response = self.response_template.format(input_data)
+            responses.append(mock_response)
+            
+            individual_metadata = {
+                "usage": {
+                    "total_tokens": 100,
+                    "prompt_tokens": len(input_data.split()),
+                    "completion_tokens": 100 - len(input_data.split())
+                }
+            }
+            metadata_list.append(individual_metadata)
+        
+        return responses, metadata_list
 
 @pytest.fixture
 def mock_random_error_engine():
     return MockRandomErrorEngine()
 
+@pytest.mark.timeout(1)  # Set timeout to 1 second
 def test_expression_error_handling(mock_engine):
-    expr = RandomErrorExpression(error_rate=0.5)
-    inputs = ["test1", "test2", "test3", "test4", "test5"]
+    expr = RandomErrorExpression(error_pattern=[False, True, False, True, False])
+    inputs = ["test1", "error", "test3", "error", "test5"]
     scheduler = BatchScheduler(expr, num_workers=2, engine=mock_engine, dataset=inputs)
     results = scheduler.run()
-    
     assert len(results) == 5
-    for result in results:
-        assert isinstance(result, ValueError) or result.startswith("Processed: test")
+    assert "Process this input without error" in str(results[0])
+    assert isinstance(results[1], ValueError)
+    assert "Process this input without error" in str(results[2])
+    assert isinstance(results[3], ValueError)
+    assert "Process this input without error" in str(results[4])
 
 def test_engine_error_handling(mock_random_error_engine):
     expr = TestExpression()
-    inputs = ["test1", "test2", "test3", "test4", "test5"]
-    scheduler = BatchScheduler(expr, num_workers=2, engine=mock_random_error_engine, dataset=inputs)
+    inputs = ["test1", "error", "test3", "test4", "error"]
+    scheduler = BatchScheduler(expr, num_workers=2, engine=mock_random_error_engine, dataset=inputs, batch_size=2)
     results = scheduler.run()
-    
     assert len(results) == 5
-    for result in results:
-        assert isinstance(result, ValueError) or result.startswith("Processed: test")
+    assert results[0]=="Simulated engine error for the entire batch"
+    assert results[1]=="Simulated engine error for the entire batch"
+    assert "Summarize this input" in str(results[2])
+    assert "Summarize this input" in str(results[3])
+    assert results[4]=="Simulated engine error for the entire batch"
 
-def test_mixed_error_handling(mock_random_error_engine):
-    expr = RandomErrorExpression(error_rate=0.3)
-    inputs = ["test1", "test2", "test3", "test4", "test5", "test6", "test7"]
-    scheduler = BatchScheduler(expr, num_workers=3, batch_size=2, engine=mock_random_error_engine, dataset=inputs)
+
+def test_double_nested_batch(mock_engine):
+    expr = DoubleNestedExpression()
+    inputs = ["nested1", "nested2", "nested3"]
+    scheduler = BatchScheduler(expr, num_workers=2, engine=mock_engine, dataset=inputs)
     results = scheduler.run()
     
-    assert len(results) == 7
-    for result in results:
-        assert isinstance(result, ValueError) or result.startswith("Processed: test")
+    assert len(results) == 3
+    for i, result in enumerate(results, 1):
+        assert f"nested{i}" in str(result)
+        assert "Combine these results" in str(result)
+        assert "Summarize this input" in str(result)
+        assert "Elaborate on this result" in str(result)
+ 
+
+ 

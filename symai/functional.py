@@ -325,8 +325,7 @@ def _process_query_single(engine,
                           trials: int = 1,
                           pre_processors: Optional[List[PreProcessor]] = None,
                           post_processors: Optional[List[PostProcessor]] = None,
-                          argument=None,
-                          executor_callback=None):   
+                          argument=None):   
     if pre_processors and not isinstance(pre_processors, list):
         pre_processors = [pre_processors]
     if post_processors and not isinstance(post_processors, list):
@@ -355,7 +354,7 @@ def _process_query_single(engine,
                     raise e
 
     limited_result = _limit_number_results(result, argument, argument.prop.return_constraint)
-
+    
     if argument.prop.return_metadata:
         return limited_result, metadata
     return limited_result

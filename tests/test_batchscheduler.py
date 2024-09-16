@@ -124,7 +124,7 @@ def mock_engine():
     return engine
 
 def test_simple_batch(mock_engine):
-    expr = TestExpression()
+    expr = TestExpression
     inputs = ["test1", "test2", "test3"]
     scheduler = BatchScheduler(expr, num_workers=2, engine=mock_engine, dataset=inputs)
     results = scheduler.run()
@@ -135,7 +135,7 @@ def test_simple_batch(mock_engine):
 
 @pytest.mark.timeout(1)   
 def test_nested_batch(mock_engine):
-    expr = NestedExpression()
+    expr = NestedExpression
     inputs = ["nested1", "nested2"]
     scheduler = BatchScheduler(expr, num_workers=2, engine=mock_engine, dataset=inputs)
     results = scheduler.run()
@@ -147,7 +147,7 @@ def test_nested_batch(mock_engine):
 
 @pytest.mark.timeout(1)   
 def test_conditional_batch(mock_engine):
-    expr = ConditionalExpression()
+    expr = ConditionalExpression
     inputs = ["short", "this is a long input"]
     scheduler = BatchScheduler(expr, num_workers=2, engine=mock_engine, dataset=inputs)
     results = scheduler.run()
@@ -156,18 +156,18 @@ def test_conditional_batch(mock_engine):
     assert "Analyze this long input" in str(results[1])
 
 def test_slow_batch(mock_engine):
-    expr = SlowExpression(delay=1)   
+    expr = SlowExpression  
     inputs = ["slow1", "slow2"]
     scheduler = BatchScheduler(expr, num_workers=2, engine=mock_engine, dataset=inputs)
     results = scheduler.run()
     assert len(results) == 2
     for i, result in enumerate(results, 1):
         assert f"slow{i}" in str(result)
-        assert "Process this input after a 1 second delay" in str(result)
+        assert "Process this input after a 5 second delay" in str(result)
 
 @pytest.mark.timeout(1)  
 def test_double_nested_slow_batch(mock_engine):
-    expr = DoubleNestedExpressionSlow()
+    expr = DoubleNestedExpressionSlow
     inputs = ["input1", "input2"]
     scheduler = BatchScheduler(expr, num_workers=2, engine=mock_engine, dataset=inputs)
     results = scheduler.run()
@@ -177,7 +177,7 @@ def test_double_nested_slow_batch(mock_engine):
         assert "Synthesize these results" in str(result)
  
 def test_simple_batch_variations(mock_engine):
-    expr = TestExpression()
+    expr = TestExpression
     inputs = ["test1", "test2", "test3", "test4", "test5", "test6"]
     
     scheduler = BatchScheduler(expr, num_workers=3, batch_size=2, engine=mock_engine, dataset=inputs)
@@ -196,7 +196,7 @@ def test_simple_batch_variations(mock_engine):
         assert "Summarize this input" in str(result)
 
 def test_nested_batch_variations(mock_engine):
-    expr = NestedExpression()
+    expr = NestedExpression
     inputs = ["nested1", "nested2", "nested3", "nested4"]
     
     # Test with batch_size=1 and num_workers=4
@@ -216,7 +216,7 @@ def test_nested_batch_variations(mock_engine):
         assert "Elaborate on this result" in str(result)
 
 def test_conditional_batch_variations(mock_engine):
-    expr = ConditionalExpression()
+    expr = ConditionalExpression
     inputs = ["short", "this is a long input", "short+", "yet another long input"]
 
     # Test with batch_size=2 and num_workers=2
@@ -229,7 +229,7 @@ def test_conditional_batch_variations(mock_engine):
     assert "Analyze this long input" in str(results[3]), f"Unexpected result for 'yet another long input': {results[3]}"
 
 def test_slow_batch_variations(mock_engine):
-    expr = SlowExpression(delay=0.5)  # Reduced delay for faster testing
+    expr = SlowExpression
     inputs = ["slow1", "slow2", "slow3", "slow4", "slow5"]
     
     # Test with batch_size=2 and num_workers=3
@@ -238,7 +238,7 @@ def test_slow_batch_variations(mock_engine):
     assert len(results) == 5
     for i, result in enumerate(results, 1):
         assert f"slow{i}" in str(result)
-        assert "Process this input after a 0.5 second delay" in str(result)
+        assert "Process this input after a 5 second delay" in str(result)
     
     # Test with batch_size=5 and num_workers=1
     scheduler = BatchScheduler(expr, num_workers=1, batch_size=5, engine=mock_engine, dataset=inputs)
@@ -246,10 +246,10 @@ def test_slow_batch_variations(mock_engine):
     assert len(results) == 5
     for i, result in enumerate(results, 1):
         assert f"slow{i}" in str(result)
-        assert "Process this input after a 0.5 second delay" in str(result)
+        assert "Process this input after a 5 second delay" in str(result)
 
 def test_double_nested_slow_batch_variations(mock_engine):
-    expr = DoubleNestedExpressionSlow()
+    expr = DoubleNestedExpressionSlow
     inputs = ["input1", "input2", "input3"]
     
     # Test with batch_size=1 and num_workers=3
@@ -269,10 +269,10 @@ def test_double_nested_slow_batch_variations(mock_engine):
         assert "Synthesize these results" in str(result)
 
 class RandomErrorExpression(Expression):
-    def __init__(self, error_pattern, **kwargs):
+    def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.error_pattern = error_pattern
-        self.counter = itertools.cycle(error_pattern)
+        self.error_pattern =[False, True, False, True, False]
+        self.counter = itertools.cycle(self.error_pattern)
     
     def forward(self, input, **kwargs):
         if next(self.counter):
@@ -314,7 +314,7 @@ def mock_random_error_engine():
     return MockRandomErrorEngine()
 
 def test_expression_error_handling(mock_engine):
-    expr = RandomErrorExpression(error_pattern=[False, True, False, True, False])
+    expr = RandomErrorExpression
     inputs = ["test1", "error", "test3", "error", "test5"]
     scheduler = BatchScheduler(expr, num_workers=2, engine=mock_engine, dataset=inputs)
     results = scheduler.run()
@@ -326,7 +326,7 @@ def test_expression_error_handling(mock_engine):
     assert "Process this input without error" in str(results[4])
 
 def test_engine_error_handling(mock_random_error_engine):
-    expr = TestExpression()
+    expr = TestExpression
     inputs = ["test1", "error", "test3", "test4", "error"]
     scheduler = BatchScheduler(expr, num_workers=2, engine=mock_random_error_engine, dataset=inputs, batch_size=2)
     results = scheduler.run()
@@ -339,7 +339,7 @@ def test_engine_error_handling(mock_random_error_engine):
 
 
 def test_double_nested_batch(mock_engine):
-    expr = DoubleNestedExpression()
+    expr = DoubleNestedExpression
     inputs = ["nested1", "nested2", "nested3"]
     scheduler = BatchScheduler(expr, num_workers=2, engine=mock_engine, dataset=inputs)
     results = scheduler.run()

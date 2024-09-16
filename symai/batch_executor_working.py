@@ -19,7 +19,7 @@ class BatchScheduler:
         self.llm_responses = {}
         self.llm_response_ready = {}
         self.pending_tasks = len(self.dataset)
-        self.expr = expr
+        self.expr = expr()
         self.pending_tasks_update = threading.Event()
  
     def single_expression(self, data_point):
@@ -28,7 +28,7 @@ class BatchScheduler:
             return expr(data_point, executor_callback=self.executor_callback)
         except Exception as e:
             print(f"Data point {data_point} generated an exception: {str(e)}")
-            return e  # Return the exception object itself
+            return e   
  
     def executor_callback(self, argument):
         with self.lock:

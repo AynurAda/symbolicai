@@ -2220,7 +2220,7 @@ class ExecutionControlPrimitives(Primitive):
                     # analyze the error
                     payload = f'[ORIGINAL_USER_PROMPT]\n{prompt["prompt_instruction"]}\n\n' if 'prompt_instruction' in prompt else ''
                     payload = payload + f'[ORIGINAL_USER_DATA]\n{code}\n\n[ORIGINAL_GENERATED_OUTPUT]\n{prompt["out_msg"]}'
-                    probe   = sym.analyze(query="What is the issue in this expression?", payload=payload, exception=e)
+                    probe   = sym.analyze(query="What is the issue in this expression?", payload=payload, exception=e, **kwargs)
                     # attempt to correct the error
                     payload = f'[ORIGINAL_USER_PROMPT]\n{prompt["prompt_instruction"]}\n\n' if 'prompt_instruction' in prompt else ''
                     payload = payload + f'[ANALYSIS]\n{probe}\n\n'
@@ -2234,14 +2234,16 @@ class ExecutionControlPrimitives(Primitive):
                             exception=e,
                             payload=payload,
                             constraints=constraints,
-                            post_processor=post_processor
+                            post_processor=post_processor,
+                            **kwargs
                         )
                     else:
                         sym = code.correct(
                             context=context,
                             exception=e,
                             payload=payload,
-                            constraints=constraints
+                            constraints=constraints,
+                            **kwargs
                         )
 
 

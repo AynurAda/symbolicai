@@ -176,7 +176,7 @@ def _process_query_single(engine,
 
     preprocessed_input = _apply_preprocessors(argument, instance, pre_processors)
     argument.prop.processed_input = preprocessed_input
-    executor_callback = argument.kwargs.get('executor_callback', None)
+    executor_callback = engine.get('executor_callback', None)
     engine.prepare(argument)
 
     result = None
